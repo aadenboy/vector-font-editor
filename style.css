@@ -1,0 +1,208 @@
+html {
+  height: 100vh;
+  width: 100vw;
+}
+* { 
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
+  /* huh */
+}
+
+input[type="button"] {
+  padding: 0.2em 0.5em;
+  border: 1px solid #000;
+  border-radius: 5px;
+  background-color: #fff;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #ddd;
+  }
+  &:active {
+    background-color: #ccc;
+  }
+}
+label {
+  display: inline-block;
+}
+input[type="number"] {
+  padding: 0.2em 0.5em;
+  border: 1px solid #000;
+  border-radius: 5px;
+  background-color: #fff;
+  width: 3em;
+}
+
+.tabs {
+  display: flex;
+  justify-content: left;
+  border-bottom: 1px solid #000;
+}
+input.tab {
+  border-radius: 5px 5px 0 0;
+  border-bottom: none;
+  
+  &.active {
+    background-color: #eee;
+  }
+  &:hover {
+    background-color: #ddd;
+  }
+  &:active {
+    background-color: #ccc;
+  }
+}
+
+.menu {
+  padding: 5px;
+  display: none;
+}
+.menu.active {
+  display: block;
+}
+select, label, input {
+  cursor: pointer;
+}
+.menu-content {
+  margin-top: 5px;
+  height: 500px;
+  overflow-y: scroll;
+}
+
+.glyph-row {
+  display: flex;
+  flex-direction: row;
+  align-items: top;
+  max-height: 136px;
+
+  &:hover {
+    z-index: 1;
+  }
+}
+.glyph {
+  padding: 5px;
+  border: 1px solid #000;
+  display: inline-block;
+  background-color: #fff;
+  width: 102px;
+  margin-right: 5px;
+  height: max-content;
+
+  &:hover {
+    background-color: #ddd;
+    z-index: 1;
+  }
+  &:active {
+    background-color: #ccc;
+  }
+}
+.glyph-preview {
+  width: 100px;
+  height: 100px;
+  border: 1px solid #000;
+  display: block;
+  margin-bottom: 0.5em;
+}
+.glyph-name {
+  display: block;
+  max-width: 102px;
+  font-size: 75%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.glyph:hover .glyph-name {
+  text-overflow: clip;
+  white-space: normal;
+  word-break: hyphenate;
+}
+
+#filter-block {
+  display: block;
+  width: min-content;
+}
+
+svg {
+  display: block;
+  border: 1px solid #000;
+}
+#edit-svg {
+  background-color: #ffe;
+  display: block;
+  border: 1px solid #000;
+  float: left;
+  margin-right: 5px;
+}
+#preview-svg {
+  margin-top: 5px;
+}
+
+@keyframes stroke-dash {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -100;
+  }
+}
+.glyph-path {
+  z-index: 0;
+  &:hover {
+    stroke: #fff;
+    stroke-width: 2;
+    fill: #555;
+    z-index: 1;
+  }
+  &.select {
+    stroke: #fff;
+    stroke-width: 2;
+    fill: #557;
+    z-index: 1;
+    stroke-dasharray: 10;
+    animation: stroke-dash 6s linear infinite;
+  }
+}
+.nohover .glyph-path:hover:not(.select) {
+  stroke: none;
+  stroke-width: 0;
+  fill: #000;
+  z-index: 0;
+}
+
+.grid-line-boundary {
+  stroke: #00f;
+  stroke-width: 3px;
+  stroke-dasharray: 3;
+  stroke-opacity: 0.8;
+  z-index: 3;
+}
+.grid-line-boundary-suggestion {
+  stroke: #000;
+  stroke-width: 2px;
+  stroke-dasharray: 10;
+  stroke-opacity: 1;
+  z-index: 2;
+}
+.grid-line-x-advance {
+  stroke: #f00;
+  stroke-width: 2px;
+  stroke-dasharray: 5;
+  srtoke-opacity: 1;
+  z-index: 3;
+}
+.path-point {
+  fill: #fff;
+  stroke: #ccc;
+  &:hover {
+    fill: #ddd;
+    stroke: #aaa;
+    stroke-width: 2;
+  }
+  &:active, &.select {
+    fill: #ccc;
+    stroke: #999;
+    stroke-width: 1;
+  }
+}
+.path-line {
+  stroke: #fff;
+}
