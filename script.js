@@ -390,6 +390,8 @@ function ThePathFunctionTM(editsvg, path, glyph) {
         }
         pointto.addEventListener("mousedown", () => {
             if (editor.mode == "select") {
+                editor.mouselast.x = NaN;
+                editor.mouselast.y = NaN;
                 editor.mode = "move";
                 editor.point = i;
                 editsvg.classList.add("nohover");
@@ -530,6 +532,8 @@ function newstroke() {
         editor.selected = glyph.data.length;
         editor.point = 0;
         glyph.data.push([0, 0]);
+        editor.mouselast.x = NaN;
+        editor.mouselast.y = NaN;
         editsvg.classList.add("nohover");
         editnew.setAttribute("value", "Finish stroke");
         unsaved = true;
