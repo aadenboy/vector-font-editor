@@ -1,5 +1,5 @@
 # Vector Font Editor
-A simple, online vector font editor, made because I'm mad this doesn't already exist.
+A simple, online vector font editor, made because I'm mad this doesn't already exist. I only actually made this for myself, but I am making this publically available as a resource for anyone who might find use out of it.
 
 # Usage
 Visit https://aadenboy.github.io/vector-font-editor/ to start.
