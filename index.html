@@ -8,18 +8,21 @@
   </head>
   <body>
     <div class="tabs">
-      <input type="button" value="Select" class="tab active" id="select-tab" />
+      <input type="button" value="Characters" class="tab active" id="select-tab" />
+      <input type="button" value="Ligatures" class="tab" id="ligature-tab" />
       <input type="button" value="Edit" class="tab" id="edit-tab" />
       <input type="button" value="Preview" class="tab" id="preview-tab" />
       <input type="button" value="Metadata" class="tab" id="metadata-tab" />
       <input type="button" value="Import/Export" class="tab" id="import-export-tab" />
       <input type="button" value="Credits" class="tab" id="credits-tab" />
+      <input type="button" value="Updates" class="tab" id="updates-tab" />
     </div>
     <div class="menu active" id="select-menu">
       <div class="menu-options" id="select-filters">
         <select id="filter-block">
           <!-- fill automatically -->
         </select>
+        <input type="text" id="filter-search" placeholder="Character or codepoint" />
         <label>
           <input type="radio" value="all" name="filter-type" id="filter-type-all" checked /> All glyphs
         </label>
@@ -32,12 +35,14 @@
       </div>
       <div class="menu-content" id="select-glyphs">
         <div id="select-glyphs-vscroll"></div>
-        <!--
-        <div class="glyph">
-          <canvas class="glyph-preview"></canvas>
-          <span class="glyph-name">.notdef</span>
-        </div>
-        -->
+      </div>
+    </div>
+    <div class="menu" id="ligature-menu">
+      <div class="menu-options">
+        <input type="button" value="New ligature" id="new-ligature" /> <p id="ligature-invalid" style="display: none;">One or more ligatures have problematic sequences! All characters in a ligature sequence must have their own glyph defined and be at least two characters long, otherwise the ligature will not work for your font!</p>
+      </div>
+      <div class="menu-content" id="select-ligatures">
+        <div id="select-ligatures-vscroll"></div>
       </div>
     </div>
     <div class="menu" id="edit-menu">
@@ -54,13 +59,19 @@
           <label>Y <input type="range" value="0" min="-10" max="10" id="edit-y" /></label>
         </div>
         <div class="edit-row">
-          <label>Advance <input type="number" value="0" step="1" id="edit-advance" /></label>
+          <label>Advance: <input type="number" value="0" step="1" id="edit-advance" /></label>
+        </div>
+        <div class="edit-row" id="ligature-metadata" style="display: none;">
+          <label>Sequence: <input type="text" id="edit-glyphs" /></label>
+        </div>
+        <div class="edit-row">
+          <input type="button" value="Delete glyph" id="edit-delete-glyph" />
         </div>
       </div>
     </div>
     <div class="menu" id="preview-menu">
       <div class="menu-options">
-        <input type="text" id="preview-text" placeholder="Type text to preview!" />
+        <input type="text" id="preview-text" placeholder="Type text to preview!" style="width: 20em;" />
         <label>Font size <input type="range" value="16" min="0" max="100" id="preview-font-size" /></label>
       </div>
       <div class="menu-content">
@@ -70,6 +81,7 @@
     <div class="menu" id="metadata-menu">
       <div class="edit-row">
         <label>Font name: <input type="text" id="metadata-name" value="Unnamed font" /></label>
+        <label>Font style: <input type="text" id="metadata-style" value="Regular" /></label>
       </div>
       <div class="edit-row">
         <label>Width: <input type="number" id="metadata-width" value="3" min="1" max="100" /></label>
@@ -98,6 +110,23 @@
         <p>Thanks to <a href="https://github.com/Jolg42">Joël Galeran</a> for <a href="https://github.com/opentypejs/opentype.js">opentype.js</a></p>
         <p>Thanks to <a href="https://github.com/tbranyen">Tim Branyen</a> for <a href="https://github.com/tbranyen/hyperlist">hyperlist</a></p>
         <p>Thanks to <a href="https://github.com/chbrown">Christopher Brown</a> for the Unicode data found in <a href="https://github.com/chbrown/unidata">unidata</a></p>
+      </div>
+    </div>
+    <div class="menu" id="updates-menu">
+      <div class="menu-content">
+        <h2>Version v1.1.0</h2>
+        <ul>
+          <li>Search by character/codepoint</li>
+          <li>Ligatures</li>
+          <li>Style metadata</li>
+          <li>Data format versioning</li>
+        </ul>
+        <hr>
+        <h2>Version v1.0.0</h2>
+        <ul>
+          <li>Initial release</li>
+          <li><i>(also a secret bug fix but shhh...)</i></li>
+        </ul>
       </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/opentype.js"></script>
