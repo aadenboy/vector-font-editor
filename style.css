@@ -24,12 +24,18 @@ input[type="button"] {
 label {
   display: inline-block;
 }
-input[type="number"] {
+input[type="number"], input[type="text"], select {
   padding: 0.2em 0.5em;
   border: 1px solid #000;
   border-radius: 5px;
   background-color: #fff;
   width: 3em;
+}
+input[type="number"], input[type="text"] {
+  cursor: text;
+}
+input[type="text"] {
+  width: 10em;
 }
 
 .tabs {
