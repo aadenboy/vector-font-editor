@@ -1,5 +1,38 @@
+/*
+
+versioning:
+
+dataformat 1 (or none): initial release
+  + name: string, name of font
+  + width: number, default character width
+  + height: number, default character height
+  + thickness: number, stroke thickness
+  + unit: number, unit size
+  + unitsPerEm: number, units per em
+  + ascender: number, glyph ascender
+  + descender: number, glyph descender
+  + glyphs: object, glyphs; should have .notdef by default
+      + advance: number, advance width (kerning)
+      + data: array, stroke data
+         [
+            stroke -> [x, y, x, y, ...]
+            stroke -> [x, y, x, y, ...]
+            ...
+         ]
+
+dataformat 2: added ligatures, styling, and versioning
+  + style: string, font style
+  + ligatures: object, ligatures
+      + glyphs: string, sequence of characters that match the ligature
+      + advance: number, advance width (kerning)
+      + data: array, stroke data (see above)
+  + dataformat: number, data format version
+  
+*/
+
 let fontData = {
     name: "Unnamed font",
+    style: "Regular",
     width: 3,
     height: 7,
     thickness: 30,
@@ -13,12 +46,15 @@ let fontData = {
             [0, 0, 2, 6],
             [0, 6, 2, 0]
         ]},
-    }
+    },
+    ligatures: {},
+    dataformat: 2
 };
 let selectedGlyph;
+let selectedType = "glyphs";
 let unsaved = false;
 
-function drawOTGlyph(name, gdata) {
+function drawOTGlyph(name, gdata, unicode) {
     let thickness = fontData.thickness;
     let unit = fontData.unit;
     const path = new opentype.Path();
@@ -55,12 +91,13 @@ function drawOTGlyph(name, gdata) {
             )
         }
     });
-    const glyph = new opentype.Glyph({
+    const data = {
         name: name,
-        unicode: name.codePointAt(0),
         advanceWidth: unit * gdata.advance,
         path: path
-    });
+    };
+    if (unicode == undefined || unicode) data.unicode = unicode || name.codePointAt(0);
+    const glyph = new opentype.Glyph(data);
     return glyph;
 }
 function drawSVGGlyph(svg, gdata, scale, x, y) {
@@ -106,24 +143,112 @@ function drawSVGGlyph(svg, gdata, scale, x, y) {
     return svg;
 }
 
+function validlig(s) {
+    if (!s || s.length < 2) return false;
+    for (let i = 0; i < s.length; i++) {
+        if (!fontData.glyphs[s[i]]) return false;
+    }
+    return true;
+}
+
 function generatefont() {
     const glyphs = [];
+    const cti = {};
+    const ligatures = [];
+
+    // glyphs
+    if (fontData.glyphs[".notdef"]) {
+        glyphs.push(drawOTGlyph(".notdef", fontData.glyphs[".notdef"], false));
+    }
+    
     Object.keys(fontData.glyphs).forEach((glyph) => {
-        glyphs.push(drawOTGlyph(glyph, fontData.glyphs[glyph]));
+        if (glyph == ".notdef") return;
+        glyphs.push(drawOTGlyph(glyph, fontData.glyphs[glyph], glyph.codePointAt(0)));
+        cti[glyph] = glyphs.length - 1;
     });
+
+    // ligatures
+    let valid = true;
+    Object.keys(fontData.ligatures).forEach((name) => {
+        const lig = fontData.ligatures[name];
+        if (!validlig(lig.glyphs)) valid = false;
+        glyphs.push(drawOTGlyph(name, lig, false));
+        const components = [];
+        for (let i = 1; i < lig.glyphs.length; i++) {
+            components.push(cti[lig.glyphs[i]]);
+        }
+        ligatures.push({
+            first: cti[lig.glyphs[0]],
+            components: components,
+            ligGlyph: ligatures.length + glyphs.length - 1
+        });
+    });
+    if (!valid) {
+        alert("One or more ligatures have problematic sequences! All characters in a ligature sequence must have their own glyph defined and be at least two characters long, otherwise the ligature will not work for your font! Please fix this in the Ligatures tab before you can export your font."); // could probably word this better
+        return;
+    }
 
     let unit = fontData.unit;
     const font = new opentype.Font({
         familyName: fontData.name,
-        styleName: "Medium",
+        styleName: fontData.style,
         unitsPerEm: fontData.unitsPerEm,
         ascender: (fontData.ascender + fontData.height - 1) * unit,
         descender: (fontData.descender * -1) * unit,
         glyphs: glyphs
     });
 
-    // const href = window.URL.createObjectURL(new Blob([font.toArrayBuffer()]), {type: "font/opentype"});
-    // console.log(href);
+    if (ligatures.length > 0) {
+        const ligsets = {};
+        ligatures.forEach((lig) => {
+            if (!ligsets[lig.first]) ligsets[lig.first] = [];
+            ligsets[lig.first].push({
+                ligGlyph: lig.ligGlyph,
+                components: lig.components
+            });
+        })
+        const coverage = [];
+        const ligsetarr = [];
+        Object.keys(ligsets).forEach((glyph) => {
+            coverage.push(parseInt(glyph));
+            ligsetarr.push(ligsets[glyph]);
+        })
+        
+        font.tables.gsub = {
+            version: 1,
+            scripts: [{
+                tag: 'DFLT', // sure
+                script: {
+                    defaultLangSys: {
+                        reserved: 0,
+                        reqFeatureIndex: 0xFFFF,
+                        featureIndexes: [0]
+                    },
+                    langSysRecords: []
+                }
+            }],
+            features: [{
+                tag: 'liga',
+                feature: {
+                    params: 0,
+                    lookupListIndexes: [0]
+                }
+            }],
+            lookups: [{
+                lookupType: 4,
+                lookupFlag: 0,
+                subtables: [{
+                    substFormat: 1,
+                    coverage: {
+                        format: 1,
+                        glyphs: coverage
+                    },
+                    ligatureSets: ligsetarr
+                }]
+            }]
+        };
+        console.log(font, font.tables.gsub);
+    }
 
     return font;
 }
@@ -153,7 +278,13 @@ function switchtab(tab) {
         editor.y = (fontData.height - 1) / 2;
         render();
     } else if (tab == "select") {
+        const yscroll = document.getElementById("select-glyphs-vscroll").scrollTop;
         loadglyphs();
+        document.getElementById("select-glyphs-vscroll").scrollTop = yscroll;
+    } else if (tab == "ligature") {
+        const yscroll = document.getElementById("select-ligatures-vscroll").scrollTop;
+        loadligatures();
+        document.getElementById("select-ligatures-vscroll").scrollTop = yscroll;
     } else if (tab == "preview") {
         rendertext();
     } else if (tab == "metadata") {
@@ -180,6 +311,7 @@ blocks.forEach((uniblock, i) => {
     option.innerHTML = uniblock.blockName;
     selectfilter.appendChild(option);
 });
+const filtersearch = document.getElementById("filter-search");
 
 const selectglyphs = document.getElementById("select-glyphs");
 function loadglyphs() {
@@ -190,6 +322,22 @@ function loadglyphs() {
         const character = i == 0 ? ".notdef" : String.fromCodePoint(i);
         if (filter.value == "all" || (filter.value == "defined" && fontData.glyphs[character]) || (filter.value == "undefined" && !fontData.glyphs[character])) {
             glyphs.push(i == 0 ? ".notdef" : i);
+        }
+    }
+    const search = filtersearch.value;
+    if (search != "") {
+        glyphs = [];
+        if (search.startsWith("U+")) {
+            const codepoint = parseInt(search.slice(2), 16);
+            if (codepoint) glyphs.push(codepoint);
+        } else if (search.length == 1) {
+            glyphs.push(search.codePointAt(0));
+        } else {
+            for (let i = block.startCode; i <= block.endCode; i++) {
+                if (characters[i] && characters[i].name.toLowerCase().includes(search.toLowerCase())) {
+                    glyphs.push(i);
+                }
+            }
         }
     }
 
@@ -236,6 +384,7 @@ function loadglyphs() {
 
         glyph.addEventListener("click", () => {
             selectedGlyph = character;
+            selectedType = "glyphs";
             switchtab("edit");
         })
 
@@ -269,6 +418,96 @@ document.getElementById("filter-type-all").addEventListener("input", loadglyphs)
 document.getElementById("filter-type-defined").addEventListener("input", loadglyphs);
 document.getElementById("filter-type-undefined").addEventListener("input", loadglyphs);
 window.addEventListener("resize, orientationchange", loadglyphs)
+filtersearch.addEventListener("input", loadglyphs);
+
+// ligatures
+const selectligatures = document.getElementById("select-ligatures");
+const newligature = document.getElementById("new-ligature");
+const ligatureinvalid = document.getElementById("ligature-invalid");
+
+function loadligatures() {
+    let ligatures = [];
+    Object.keys(fontData.ligatures).forEach((ligature) => {
+        ligatures.push(ligature);
+    })
+    ligatures.sort((a, b) => {
+        return a < b;
+    })
+    if (ligatures.length == 0) {
+        document.getElementById("select-ligatures-vscroll").innerHTML = "<p>No ligatures defined.</p>";
+        return;
+    };
+
+    ligatureinvalid.style.display = "none";
+    const perrow = Math.floor((selectligatures.clientWidth + 5) / 117);
+    const renderSingleItem = (li) => {
+        const index = ligatures[li];
+        if (!index) return;
+        const ligature = fontData.ligatures[index];
+        const glyph = document.createElement("div");
+        glyph.classList.add("glyph");
+        if (!validlig(ligature.glyphs)) {
+            glyph.style.backgroundColor = "#fcc";
+            ligatureinvalid.style.display = "block";
+        }
+
+        const glyphlabel = document.createElement("span");
+        glyphlabel.classList.add("glyph-name");
+        glyphlabel.innerHTML = index;
+
+        let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.classList.add("glyph-preview");
+        svg.setAttribute("width", "100px");
+        svg.setAttribute("height", "100px");
+        svg.setAttribute("viewBox", "0 0 100 100");
+        svg = drawSVGGlyph(svg, ligature, 25 / fontData.width, 50, 50)
+
+        glyph.appendChild(svg);
+        glyph.appendChild(glyphlabel);
+
+        glyph.addEventListener("click", () => {
+            selectedGlyph = index;
+            selectedType = "ligatures";
+            switchtab("edit");
+        })
+
+        return glyph;
+    };
+    const renderItem = (li) => {
+        const row = document.createElement("div");
+        row.classList.add("glyph-row");
+        for (let i = 0; i < perrow; i++) {
+            const ligature = renderSingleItem(li * perrow + i);
+            if (ligature) row.appendChild(ligature);
+        }
+        return row;
+    }
+
+    document.getElementById("select-ligatures-vscroll").remove();
+    const selectligaturesvs = document.createElement("div")
+    selectligaturesvs.id = "select-ligatures-vscroll";
+    new HyperList(selectligaturesvs, {
+        itemHeight: 145,
+        total: Math.ceil(ligatures.length / perrow),
+        generate: renderItem,
+        buffer: 5
+    })
+    selectligatures.appendChild(selectligaturesvs);
+}
+loadligatures();
+
+newligature.addEventListener("click", () => {
+    const name = prompt("Enter the name of the ligature:");
+    if (name) {
+        fontData.ligatures[name] = {
+            glyphs: "",
+            advance: fontData.width,
+            data: []
+        };
+        unsaved = true;
+        loadligatures();
+    }
+})
 
 // edit page
 const edittab = document.getElementById("edit-tab");
@@ -278,8 +517,10 @@ const editunit = document.getElementById("edit-unit-size");
 const editx = document.getElementById("edit-x");
 const edity = document.getElementById("edit-y");
 const editadvance = document.getElementById("edit-advance");
+const editglyphs = document.getElementById("edit-glyphs");
 const editnew = document.getElementById("edit-new-stroke");
 const editdelete = document.getElementById("edit-delete-stroke");
+const editdeleteglyph = document.getElementById("edit-delete-glyph");
 
 let editor = {
     unit: 1,
@@ -304,24 +545,36 @@ let editor = {
 function render() {
     editsvg.innerHTML = "";
     if (!selectedGlyph) {
-        edittitle.innerHTML = "Select a glyph in the Select menu to start!";
+        edittitle.innerHTML = "Select a glyph or ligature to start!";
         return;
     };
-    if (!fontData.glyphs[selectedGlyph]) {
-        fontData.glyphs[selectedGlyph] = {
-            advance: 3,
+    if (!fontData[selectedType][selectedGlyph]) {
+        fontData[selectedType][selectedGlyph] = selectedType == "glyphs" ? {
+            advance: fontData.width,
+            data: []
+        } : { // redundant, but just in case
+            glyphs: "",
+            advance: fontData.width,
             data: []
         };
         unsaved = true;
     }
-    const index = selectedGlyph.codePointAt(0);
-    if (selectedGlyph == ".notdef") {
-        edittitle.innerHTML = ".notdef";
-    } else if (characters[index]) {
-        edittitle.innerHTML = characters[index].name.replace(/</g, "&lt;").replace(/>/g, "&gt;") + " — U+" + (index).toString(16).toUpperCase();
+    if (selectedType == "glyphs") {
+        const index = selectedGlyph.codePointAt(0);
+        if (selectedGlyph == ".notdef") {
+            edittitle.innerHTML = ".notdef";
+        } else if (characters[index]) {
+            edittitle.innerHTML = characters[index].name.replace(/</g, "&lt;").replace(/>/g, "&gt;") + " — U+" + index.toString(16).toUpperCase().padStart(4, "0");
+        } else {
+            edittitle.innerHTML = "U+" + (index).toString(16).toUpperCase();
+        }
+        document.getElementById("ligature-metadata").style.display = "none";
     } else {
-        edittitle.innerHTML = "U+" + (index).toString(16).toUpperCase();
-    }
+        edittitle.innerHTML = selectedGlyph.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        document.getElementById("ligature-metadata").style.display = "block";
+        editglyphs.style.backgroundColor = validlig(fontData.ligatures[selectedGlyph].glyphs) ? "#fff" : "#fcc";
+        editglyphs.value = fontData.ligatures[selectedGlyph].glyphs;
+    };
     
     editor.scale = Math.min(editsvg.clientWidth / (fontData.width - 1), editsvg.clientHeight / (fontData.height - 1)) * 0.65
     editor.units.x = Math.ceil(editsvg.clientWidth / editor.scale);
@@ -331,7 +584,7 @@ function render() {
     editor.units.rel = (pos2.x - pos1.x) / (2**(editor.unit-1));
     drawPath();
     drawGrid();
-    editadvance.value = fontData.glyphs[selectedGlyph].advance;
+    editadvance.value = fontData[selectedType][selectedGlyph].advance;
     editadvance.setAttribute("step", 1 / (2**(editor.unit - 1)));
 }
 
@@ -339,7 +592,12 @@ function drawPath() {
     editsvg.querySelectorAll(".glyph-path, .path-point, .path-line").forEach((path) => {
         path.remove();
     });
-    const glyph = fontData.glyphs[selectedGlyph];
+    const glyph = fontData[selectedType][selectedGlyph];
+    if (editor.mode != "add") {
+        glyph.data.forEach((stroke, i) => { // cleansing
+            if (stroke.length < 4) glyph.data.splice(i, 1);
+        })
+    }
     const pos = editor.pos((fontData.width - 1) / 2, (fontData.height - 1) / 2);
     drawSVGGlyph(editsvg, glyph, editor.scale, pos.x, pos.y);
 
@@ -405,7 +663,7 @@ editsvg.addEventListener("mousemove", (event) => {
     if (mouse.x == editor.mouselast.x && mouse.y == editor.mouselast.y) return;
     editor.mouselast = mouse;
     if ((editor.mode == "move" || editor.mode == "add") && editor.selected != -1 && editor.point != -1) {
-        const glyph = fontData.glyphs[selectedGlyph];
+        const glyph = fontData[selectedType][selectedGlyph];
         const stroke = glyph.data[editor.selected];
         stroke[editor.point] = mouse.x;
         stroke[editor.point + 1] = mouse.y;
@@ -448,7 +706,7 @@ function drawGrid() {
     document.querySelectorAll("line.grid-line").forEach((line) => {
         line.remove();
     });
-    const glyph = fontData.glyphs[selectedGlyph];
+    const glyph = fontData[selectedType][selectedGlyph];
     const linesx = {};
     const linesy = {};
 
@@ -520,13 +778,13 @@ edity.addEventListener("input", () => {
 })
 editadvance.addEventListener("input", () => {
     if (!isNaN(parseFloat(editadvance.value))) {
-        fontData.glyphs[selectedGlyph].advance = parseFloat(editadvance.value);
+        fontData[selectedType][selectedGlyph].advance = parseFloat(editadvance.value);
         unsaved = true;
         drawGrid();
     }
 })
 function newstroke() {
-    const glyph = fontData.glyphs[selectedGlyph];
+    const glyph = fontData[selectedType][selectedGlyph];
     if (editor.mode != "add") {
         editor.mode = "add";
         editor.selected = glyph.data.length;
@@ -553,7 +811,7 @@ editnew.addEventListener("click", newstroke);
 function deletestroke() {
     if (editor.selected != -1) {
         editor.mode = "select";
-        fontData.glyphs[selectedGlyph].data.splice(editor.selected, 1);
+        fontData[selectedType][selectedGlyph].data.splice(editor.selected, 1);
         unsaved = true;
         editor.selected = -1;
         editor.point = -1;
@@ -572,6 +830,18 @@ window.addEventListener("keydown", (event) => {
         deletestroke();
     }
 })
+editdeleteglyph.addEventListener("click", () => {
+    if (!selectedGlyph) return;
+    delete fontData[selectedType][selectedGlyph];
+    unsaved = true;
+    switchtab(selectedType == "glyphs" ? "select" : "ligature");
+})
+editglyphs.addEventListener("input", () => {
+    if (selectedType != "ligatures") return;
+    fontData.ligatures[selectedGlyph].glyphs = editglyphs.value;
+    unsaved = true;
+    editglyphs.style.backgroundColor = validlig(editglyphs.value) ? "#fff" : "#fcc";
+})
 
 // preview page
 const previewsvg = document.getElementById("preview-svg");
@@ -582,7 +852,18 @@ function rendertext() {
     previewsvg.innerHTML = "";
     const text = previewtext.value;
     let x = 10 + (fontData.width - 1) / 2 * previewsize.value;
+    let iskip = 0;
     for (let i = 0; i < text.length; i++) {
+        if (i < iskip) continue;
+        Object.keys(fontData.ligatures).forEach((name) => {
+            const ligature = fontData.ligatures[name];
+            if (text.slice(i, i + ligature.glyphs.length) == ligature.glyphs) {
+                drawSVGGlyph(previewsvg, ligature, previewsize.value, x, (fontData.height - 1) / 2 * previewsize.value + 10);
+                x += ligature.advance * previewsize.value;
+                iskip = i + name.length;
+            }
+        })
+        if (i < iskip) continue; // twice because of the ligature check
         const char = text[i];
         const glyph = fontData.glyphs[char] || fontData.glyphs[".notdef"];
         if (glyph) {
@@ -596,6 +877,7 @@ previewsize.addEventListener("input", rendertext);
 
 // metadata page
 const metadatafn = document.getElementById("metadata-name");
+const metadatafs = document.getElementById("metadata-style");
 const metadataw = document.getElementById("metadata-width");
 const metadatah = document.getElementById("metadata-height");
 const metadatath = document.getElementById("metadata-thickness");
@@ -606,6 +888,10 @@ const metadatadsc = document.getElementById("metadata-descender");
 
 metadatafn.addEventListener("input", () => {
     fontData.name = metadatafn.value;
+    unsaved = true;
+});
+metadatafs.addEventListener("input", () => {
+    fontData.style = metadatafs.value;
     unsaved = true;
 });
 metadataw.addEventListener("input", () => {
@@ -650,33 +936,47 @@ importproject.addEventListener("click", () => {
         const file = input.files[0];
         const reader = new FileReader();
         reader.addEventListener("load", () => {
-            // validation
+            // validation crap
             const f = JSON.parse(reader.result);
+            console.log(f);
+            let version = f.dataformat || 1
             // this is so ugly but WHATEVER enjoy debugging this HAAHHAHAA.
-            if (typeof f.name == "string" && typeof f.width == "number" && typeof f.height == "number" && typeof f.thickness == "number" && typeof f.unit == "number" && typeof f.unitsPerEm == "number" && typeof f.ascender == "number" && typeof f.descender == "number" && typeof f.glyphs == "object") {
-                Object.keys(f.glyphs).forEach((glyph) => {
-                    if (typeof f.glyphs[glyph].advance == "number" && Array.isArray(f.glyphs[glyph].data)) {
-                        f.glyphs[glyph].data.forEach((stroke) => {
-                            if (Array.isArray(stroke)) {
-                                stroke.forEach((point) => {
-                                    if (typeof point != "number") {
-                                        alert("Invalid project file!");
-                                        return;
-                                    }
-                                })
-                            } else {
-                                alert("Invalid project file!");
-                                return;
-                            }
-                        })
-                    } else {
-                        alert("Invalid project file!");
-                        return;
-                    }
-                })
+            if (typeof f.name == "string" && (typeof f.style == "string" || version < 2) && typeof f.width == "number" && typeof f.height == "number" && typeof f.thickness == "number" && typeof f.unit == "number" && typeof f.unitsPerEm == "number" && typeof f.ascender == "number" && typeof f.descender == "number" && typeof f.glyphs == "object" && (typeof f.ligatures == "object" || version < 2) && (typeof f.dataformat == "number" || version < 2)) {
+                const checkthing = (g) => {
+                    Object.keys(g).forEach((glyph) => {
+                        if (typeof g[glyph].advance == "number" && Array.isArray(g[glyph].data) && (g == f.glyphs || typeof g[glyph].glyphs == "string")) {
+                            g[glyph].data.forEach((stroke) => {
+                                if (Array.isArray(stroke)) {
+                                    stroke.forEach((point) => {
+                                        if (typeof point != "number") {
+                                            alert("Invalid project file!");
+                                            return;
+                                        }
+                                    })
+                                } else {
+                                    alert("Invalid project file!");
+                                    return;
+                                }
+                            })
+                        } else {
+                            alert("Invalid project file!");
+                            return;
+                        }
+                    })
+                }
+                checkthing(f.glyphs);
+                if (version > 1) checkthing(f.ligatures);
             } else {
                 alert("Invalid project file!");
                 return;
+            }
+
+            // updates older versions to newer ones iteratively
+            if (version == 1) {
+                f.style = "Regular";
+                f.ligatures = {};
+                f.dataformat = 2;
+                version++;
             }
             
             // loading
@@ -700,6 +1000,7 @@ exportproject.addEventListener("click", () => {
 
 exportfont.addEventListener("click", () => {
     const font = generatefont();
+    if (!font) return;
     const blob = new Blob([font.toArrayBuffer()], {type: "font/opentype"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
