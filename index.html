@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
@@ -50,22 +50,63 @@
       <div class="menu-content" id="edit-glyph-box">
         <svg id="edit-svg" width="300px" height="300px" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="edit-row">
-          <input type="button" value="New stroke" id="edit-new-stroke" />
-          <input type="button" value="Delete stroke" id="edit-delete-stroke" />
+          <label class="disabled">Stroke: <input type="number" value="none" step="1" min="0" max="0" id="edit-stroke-select" /></label>
         </div>
         <div class="edit-row">
-          <label>Grid size <input type="range" value="1" min="1" max="4" id="edit-unit-size" /></label>
-          <label>X <input type="range" value="0" min="-10" max="10" id="edit-x" /></label>
-          <label>Y <input type="range" value="0" min="-10" max="10" id="edit-y" /></label>
+          <input class="disabled" type="button" value="New stroke" id="edit-new-stroke" />
+          <input class="disabled" type="button" value="Delete stroke" id="edit-delete-stroke" />
+        </div>
+        <hr>
+        <div class="edit-row">
+          <label class="disabled">Width: <input type="number" value="none" min="0" max="1000" id="edit-width" />%</label>
         </div>
         <div class="edit-row">
-          <label>Advance: <input type="number" value="0" step="1" id="edit-advance" /></label>
+          Caps: 
+          <label class="radio-icon disabled"><input type="radio" value="circle" name="edit-cap-type" id="edit-cap-type-circle" checked /><svg viewBox="0 0 2 2" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 2 L 0 1 C 0 0.4477 0.4477 0 1 0 C 1.5523 0 2 0.4477 2 1 L 2 2 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="square" name="edit-cap-type" id="edit-cap-type-square" /><svg viewBox="0 0 2 2" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 2 L 0 0 L 2 0 L 2 2 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="triangle" name="edit-cap-type" id="edit-cap-type-triangle" /><svg viewBox="0 0 2 2" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 2 L 0 1 L 1 0 L 2 1 L 2 2 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="none" name="edit-cap-type" id="edit-cap-type-none" /><svg viewBox="0 0 2 2" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 2 L 0 1 L 2 1 L 2 2 Z"></path>
+          </svg></label>
+        </div>
+        <div class="edit-row">
+          Corners: 
+          <label class="radio-icon disabled"><input type="radio" value="round" name="edit-corner-type" id="edit-corner-type-round" checked /><svg viewBox="-0.5 -0.5 3.3 3.3" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 1.0256088 4.22485951 L 0.4256088 1.62485951 C 0.25943832877546 0.90478747541696 0.90478747541696 0.25943832877546 1.62485951 0.4256088 L 4.22485951 1.0256088 L 3.77514049 2.9743912 L 2.73416641 2.73416641 L 2.9743912 3.77514049 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="miter" name="edit-corner-type" id="edit-corner-type-miter" /><svg viewBox="-0.5 -0.5 3.3 3.3" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 1.0256088 4.22485951 L 0.06583359 0.06583359 L 4.22485951 1.0256088 L 3.77514049 2.9743912 L 2.73416641 2.73416641 L 2.9743912 3.77514049 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="bevel" name="edit-corner-type" id="edit-corner-type-bevel" /><svg viewBox="-0.5 -0.5 3.3 3.3" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 1.0256088 4.22485951 L 0.4256088 1.62485951 L 1.62485951 0.4256088 L 4.22485951 1.0256088 L 3.77514049 2.9743912 L 2.73416641 2.73416641 L 2.9743912 3.77514049 Z"></path>
+          </svg></label>
+          <label class="radio-icon disabled"><input type="radio" value="none" name="edit-corner-type" id="edit-corner-type-none" /><svg viewBox="-0.5 -0.5 3.3 3.3" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 1.0256088 4.22485951 L 0.4256088 1.62485951 L 1.4 1.4 L 1.62485951 0.4256088 L 4.22485951 1.0256088 L 3.77514049 2.9743912 L 2.73416641 2.73416641 L 2.9743912 3.77514049 Z"></path>
+          </svg></label>
+        </div>
+        <div class="edit-row">
+          <input class="disabled" type="button" value="Set as default" id="edit-stroke-default" />
+        </div>
+        <hr>
+        <div class="edit-row">
+          <label class="disabled">Advance: <input type="number" value="0" step="1" id="edit-advance" /></label>
         </div>
         <div class="edit-row" id="ligature-metadata" style="display: none;">
-          <label>Sequence: <input type="text" id="edit-glyphs" /></label>
+          <label class="disabled">Sequence: <input type="text" id="edit-glyphs" /></label>
         </div>
         <div class="edit-row">
-          <input type="button" value="Delete glyph" id="edit-delete-glyph" />
+          <input class="disabled" type="button" value="Delete glyph" id="edit-delete-glyph" />
+        </div>
+        <div class="edit-row" style="clear: left;">
+          <label class="disabled">Grid size <input type="range" value="1" min="1" max="4" id="edit-unit-size" /></label>
+          <label class="disabled">X <input type="range" value="0" min="-10" max="10" id="edit-x" /></label>
+          <label class="disabled">Y <input type="range" value="0" min="-10" max="10" id="edit-y" /></label>
         </div>
       </div>
     </div>
@@ -114,6 +155,14 @@
     </div>
     <div class="menu" id="updates-menu">
       <div class="menu-content">
+        <h2>Version v1.2.0</h2>
+        <ul>
+          <li>Redid how strokes are drawn</li>
+          <li>Stroke customization</li>
+          <li>Single points are now rendered</li>
+          <li>Minor bug fixes and UX changes</li>
+        </ul>
+        <hr>
         <h2>Version v1.1.0</h2>
         <ul>
           <li>Search by character/codepoint</li>
@@ -130,9 +179,9 @@
       </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/opentype.js"></script>
-    <script src="hyperlist.js"></script>
-    <script src="blocks.js"></script>
-    <script src="characters.js"></script>
+    <script src="https://aadenboy.github.io/vector-font-editor/hyperlist.js"></script>
+    <script src="https://aadenboy.github.io/vector-font-editor/blocks.js"></script>
+    <script src="https://aadenboy.github.io/vector-font-editor/characters.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
