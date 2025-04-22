@@ -28,7 +28,40 @@ dataformat 2: added ligatures, styling, and versioning
       + data: array, stroke data (see above)
   + dataformat: number, data format version
   
+dataformat 3: added line styling
+  + defaultwidth: the default stroke width
+  + defaultjoin: the default line joining type
+  + defaultcap: the default cap type
+  * glyphs
+    * data: now includes line styling
+      + points: a list of points; [x, y, x, y, ...]
+      + width: the width of the line as a percent 
+      + join: how to join at corners
+         "round": connects the lines with an arc
+         "miter": extends the lines to meet at an angle
+         "bevel": connects the lines with a straight edge
+         "none": leaves a gap
+      + cap: the kind of caps at the ends of the line
+         "circle": adds a half-circle
+         "square": extends it out
+         "triangle": connects the corners at an angle
+         "none": does nothing
+
 */
+
+window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
+    alert(lineNumber + " - Error occured: " + errorMsg);//or any message
+    return false;
+}
+
+const debugdiv = document.createElement("div");
+debugdiv.id = "debug";
+document.body.appendChild(debugdiv);
+function debug(s) {
+    const p = document.createElement("p");
+    p.innerHTML = s;
+    debugdiv.appendChild(p);
+}
 
 let fontData = {
     name: "Unnamed font",
@@ -40,11 +73,14 @@ let fontData = {
     unitsPerEm: 1000,
     ascender: 0,
     descender: 2,
+    defaultwidth: 1,
+    defaultjoin: "round",
+    defaultcap: "circle",
     glyphs: {
         ".notdef": {advance: 3, data: [
-            [0, 0, 0, 6, 2, 6, 2, 0, 0, 0],
-            [0, 0, 2, 6],
-            [0, 6, 2, 0]
+            {points: [0, 0, 0, 6, 2, 6, 2, 0, 0, 0], width: 1, join: "round", cap: "circle"},
+            {points: [0, 0, 2, 6], width: 1, join: "round", cap: "circle"},
+            {points: [0, 6, 2, 0], width: 1, join: "round", cap: "circle"},
         ]},
     },
     ligatures: {},
@@ -54,42 +90,183 @@ let selectedGlyph;
 let selectedType = "glyphs";
 let unsaved = false;
 
-function drawOTGlyph(name, gdata, unicode) {
-    let thickness = fontData.thickness;
-    let unit = fontData.unit;
-    const path = new opentype.Path();
-    gdata.data.forEach((stroke) => {
-        for (let i = 2; i < stroke.length; i += 2) {
-            const topoint = { x: stroke[i - 2], y: stroke[i - 1] };
-            const frompoint = { x: stroke[i], y: stroke[i + 1] };
-            const to = { x: topoint.x * unit, y: topoint.y * unit };
-            const from = { x: frompoint.x * unit, y: frompoint.y * unit };
-            const angle = Math.atan2(to.y - from.y, to.x - from.x);
-            const offfront = { x: Math.cos(angle) * thickness, y: Math.sin(angle) * thickness }
-            const left = angle + Math.PI / 2;
-            const offleft = { x: Math.cos(left) * thickness, y: Math.sin(left) * thickness }
-            const right = angle - Math.PI / 2;
-            const offright = { x: Math.cos(right) * thickness, y: Math.sin(right) * thickness }
-            path.moveTo(from.x + offleft.x, from.y + offleft.y);
-            path.lineTo(to.x + offleft.x, to.y + offleft.y);
-            path.curveTo(
-                to.x + offleft.x + offfront.x * 1.2,
-                to.y + offleft.y + offfront.y * 1.2,
-                to.x + offright.x + offfront.x * 1.2,
-                to.y + offright.y + offfront.y * 1.2,
-                to.x + offright.x,
-                to.y + offright.y
-            )
-            path.lineTo(from.x + offright.x, from.y + offright.y)
-            path.curveTo(
-                from.x + offright.x - offfront.x * 1.2,
-                from.y + offright.y - offfront.y * 1.2,
-                from.x + offleft.x - offfront.x * 1.2,
-                from.y + offleft.y - offfront.y * 1.2,
-                from.x + offleft.x,
-                from.y + offleft.y
-            )
+class SVGPath {
+    constructor(x, y) {
+        this.commands = [];
+        this.offset = {x: x, y: y}
+    }
+
+    push(v, i) {
+        if (i != undefined) this.commands[i] = v; else this.commands.push(v);
+    }
+
+    moveTo(x, y, i) {
+        this.push(`M ${this.offset.x+x} ${this.offset.y-y}`, i);
+    }
+
+    lineTo(x, y, i) {
+        this.push(`L ${this.offset.x+x} ${this.offset.y-y}`, i);
+    }
+
+    curveTo(x1, y1, x2, y2, x3, y3, i) {
+        this.push(`C ${this.offset.x+x1} ${this.offset.y-y1} ${this.offset.x+x2} ${this.offset.y-y2} ${this.offset.x+x3} ${this.offset.y-y3}`, i);
+    }
+
+    toString() {
+        return this.commands.join(' ') + " Z";
+    }
+}
+
+
+function calcArc(x1, y1, x4, y4, xc, yc) { // taken from https://stackoverflow.com/a/44829356
+    // use two arcs if angle is 180
+    let ax = x1 - xc;
+    let ay = y1 - yc;
+    let bx = x4 - xc;
+    let by = y4 - yc;
+    let q1 = ax * ax + ay * ay;
+    let q2 = q1 + ax * bx + ay * by;
+    let k2 = (4/3) * (ax * by - ay * bx) / (Math.sqrt(2 * q1 * q2) + q2);
+
+    let x2 = xc + ax - k2 * ay;
+    let y2 = yc + ay + k2 * ax;
+    let x3 = xc + bx + k2 * by;
+    let y3 = yc + by - k2 * bx;
+    return {x2: x2, y2: y2, x3: x3, y3: y3};
+}
+function drawArc(path, x1, y1, x4, y4, xc, yc) {
+    const arc = calcArc(x1, y1, x4, y4, xc, yc);
+    path.curveTo(arc.x2, arc.y2, arc.x3, arc.y3, x4, y4);
+}
+
+const r90 = Math.PI/2;
+function drawStroke(path, stroke, thickness, unit) {
+    const tw = thickness * stroke.width;
+    const points = stroke.points;
+    const last = points.length - 2;
+    const equalse = points[0] == points[last]
+                 && points[1] == points[last+1];
+    if ((equalse && points.length <= 4) || points.length <= 2) {
+        const b = {x: points[0] * unit, y: points[1] * unit};
+        const l = {x: -tw, y: 0};
+        const u = {x: 0,   y: -tw};
+        if (stroke.cap == "circle") {
+            path.moveTo(b.x-l.x, b.y-l.y);
+            drawArc(path, b.x-l.x, b.y-l.y, b.x-u.x, b.y-u.y, b.x, b.y);
+            drawArc(path, b.x-u.x, b.y-u.y, b.x+l.x, b.y+l.y, b.x, b.y);
+            drawArc(path, b.x+l.x, b.y+l.y, b.x+u.x, b.y+u.y, b.x, b.y);
+            drawArc(path, b.x+u.x, b.y+u.y, b.x-l.x, b.y-l.y, b.x, b.y);
+        } else if (stroke.cap == "triangle") {
+            path.moveTo(b.x-l.x, b.y-l.y);
+            path.lineTo(b.x-u.x, b.y-u.y);
+            path.lineTo(b.x+l.x, b.y+l.y);
+            path.lineTo(b.x+u.x, b.y+u.y);
+        } else {
+            path.moveTo(b.x-l.x-u.x, b.x-l.y-u.y);
+            path.moveTo(b.x+l.x-u.x, b.x+l.y-u.y);
+            path.moveTo(b.x+l.x+u.x, b.x+l.y+u.y);
+            path.moveTo(b.x-l.x+u.x, b.x-l.y+u.y);
         }
+        return;
+    }
+    for (let ri = 0; ri < points.length*2-2; ri += 2) {
+        const i     = -Math.abs(ri     - (last)) + (last);
+        const iprev = -Math.abs(ri - 2 - (last)) + (last);
+        const inext = -Math.abs(ri + 2 - (last)) + (last);
+        let a = {x: points[iprev] * unit, y: points[iprev+1] * unit}; // previous
+        let b = {x: points[i]     * unit, y: points[i+1]     * unit}; // current
+        let c = {x: points[inext] * unit, y: points[inext+1] * unit}; // next
+        if (i == 0 && (ri < points.length || !equalse)) {
+            const rcb = Math.atan2(c.y - b.y, c.x - b.x);
+            const lcb = {x: Math.cos(rcb+r90) * tw, y: Math.sin(rcb+r90) * tw};
+            const ucb = {x: Math.cos(rcb)     * tw, y: Math.sin(rcb)     * tw};
+            if (ri >= points.length) {
+                const rba = Math.atan2(b.y - a.y, b.x - a.x);
+                const lba = {x: Math.cos(rba+r90) * tw, y: Math.sin(rba+r90) * tw};
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                break;
+            }
+            if (equalse) path.moveTo(b.x+lcb.x, b.y+lcb.y);
+            else if (stroke.cap == "none") path[ri == 0 ? "moveTo" : "lineTo"](b.x+lcb.x, b.y+lcb.y);
+            else if (stroke.cap == "circle") {
+                path.moveTo(b.x-lcb.x, b.y-lcb.y);
+                drawArc(path, b.x-lcb.x, b.y-lcb.y, b.x-ucb.x, b.y-ucb.y, b.x, b.y);
+                drawArc(path, b.x-ucb.x, b.y-ucb.y, b.x+lcb.x, b.y+lcb.y, b.x, b.y);
+            } else if (stroke.cap == "square") {
+                path.moveTo(b.x-lcb.x-ucb.x, b.y-lcb.y-ucb.y);
+                path.lineTo(b.x+lcb.x-ucb.x, b.y+lcb.y-ucb.y);
+            } else if (stroke.cap == "triangle") {
+                path.moveTo(b.x-lcb.x, b.y-lcb.y);
+                path.lineTo(b.x-ucb.x, b.y-ucb.y);
+                path.lineTo(b.x+lcb.x, b.y+lcb.y);
+            }
+        } else if (i == last && !equalse) {
+            const rba = Math.atan2(b.y - a.y, b.x - a.x);
+            const lba = {x: Math.cos(rba+r90) * tw, y: Math.sin(rba+r90) * tw};
+            const uba = {x: Math.cos(rba)     * tw, y: Math.sin(rba)     * tw};
+            if (stroke.cap == "circle") {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                drawArc(path, b.x+lba.x, b.y+lba.y, b.x+uba.x, b.y+uba.y, b.x, b.y);
+                drawArc(path, b.x+uba.x, b.y+uba.y, b.x-lba.x, b.y-lba.y, b.x, b.y);
+            } else if (stroke.cap == "square") {
+                path.lineTo(b.x+lba.x+uba.x, b.y+lba.y+uba.y);
+                path.lineTo(b.x-lba.x+uba.x, b.y-lba.y+uba.y);
+            } else if (stroke.cap == "triangle") {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                path.lineTo(b.x+uba.x, b.y+uba.y);
+                path.lineTo(b.x-lba.x, b.y-lba.y);
+            } else if (stroke.cap == "none") {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                path.lineTo(b.x-lba.x, b.y-lba.y);
+            }
+        } else {
+            if (i == last) c = {x: points[2] * unit, y: points[3] * unit};
+            if (i == 0) c = {x: points[points.length - 4] * unit, y: points[points.length - 3] * unit};
+            const rba = Math.atan2(b.y - a.y, b.x - a.x);
+            const rcb = Math.atan2(c.y - b.y, c.x - b.x);
+            const lcb = {x: Math.cos(rcb+r90) * tw, y: Math.sin(rcb+r90) * tw};
+            const ucb = {x: Math.cos(rcb)     * tw, y: Math.sin(rcb)     * tw};
+            const lba = {x: Math.cos(rba+r90) * tw, y: Math.sin(rba+r90) * tw};
+            const uba = {x: Math.cos(rba)     * tw, y: Math.sin(rba)     * tw};
+            const cross = -((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x));
+            if (stroke.join == "none" && cross > 0) {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                path.lineTo(b.x, b.y);
+                path.lineTo(b.x+lcb.x, b.y+lcb.y);
+            } else if (stroke.join == "round" && cross > 0) {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                drawArc(path, b.x+lba.x, b.y+lba.y, b.x+lcb.x, b.y+lcb.y, b.x, b.y);
+            } else if (stroke.join == "bevel" && cross > 0) {
+                path.lineTo(b.x+lba.x, b.y+lba.y);
+                path.lineTo(b.x+lcb.x, b.y+lcb.y);
+            }
+            if ((cross < 0 || stroke.join == "miter" || (cross > 0 && i == last)) && cross != 0) { // interestingly, the tangent point works for both the underside and the miter join
+                const theta0 = rba + r90;
+                const theta1 = rcb + r90;
+                const theta = theta1 - theta0;
+                const tan = Math.tan(-0.5 * theta);
+                if (cross < 0 || stroke.join == "miter") path.lineTo(b.x+lba.x+uba.x*tan, b.y+lba.y+uba.y*tan);
+                if (i == last && cross < 0) { // turns out it's symmetric, that's why!
+                    path.moveTo(b.x-lba.x, b.y-lba.y);
+                    path.moveTo(b.x+lba.x+uba.x*tan, b.y+lba.y+uba.y*tan, 0);
+                } else if (i == last && cross > 0) {
+                    path.moveTo(b.x-lba.x-uba.x*tan, b.y-lba.y-uba.y*tan);
+                    path.moveTo(b.x+lcb.x, b.y+lcb.y, 0);
+                }
+            } else {
+                
+            }
+        }
+    }
+}
+
+function drawOTGlyph(name, gdata, unicode) {
+    const thickness = fontData.thickness;
+    const unit = fontData.unit;
+    const path = new opentype.Path();
+    const strokes = gdata.data;
+    strokes.forEach((stroke) => {
+        drawStroke(path, stroke, thickness, unit);
     });
     const data = {
         name: name,
@@ -103,39 +280,13 @@ function drawOTGlyph(name, gdata, unicode) {
 function drawSVGGlyph(svg, gdata, scale, x, y) {
     let thickness = fontData.thickness * (scale / fontData.unit);
     let unit = scale;
+    const dx = x - (fontData.width - 1) * unit / 2
+    const dy = y + (fontData.height - 1) * unit / 2
     gdata.data.forEach((stroke, i) => {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        let d = ""
-        for (let i = 2; i < stroke.length; i += 2) {
-            const topoint = { x: stroke[i - 2], y: stroke[i - 1] };
-            const frompoint = { x: stroke[i], y: stroke[i + 1] };
-            const to = { x: topoint.x * unit, y: topoint.y * unit };
-            const from = { x: frompoint.x * unit, y: frompoint.y * unit };
-            const angle = Math.atan2(to.y - from.y, to.x - from.x);
-            const offfront = { x: Math.cos(angle) * thickness, y: Math.sin(angle) * thickness }
-            const left = angle + Math.PI / 2;
-            const offleft = { x: Math.cos(left) * thickness, y: Math.sin(left) * thickness }
-            const right = angle - Math.PI / 2;
-            const offright = { x: Math.cos(right) * thickness, y: Math.sin(right) * thickness }
-            const dx = x - (fontData.width - 1) * unit / 2
-            const dy = y + (fontData.height - 1) * unit / 2
-            d = d + `M ${dx + from.x + offleft.x} ${dy-(from.y + offleft.y)}
-            L ${dx + to.x + offleft.x} ${dy-(to.y + offleft.y)}
-            C ${dx + to.x + offleft.x + offfront.x * 1.2}
-              ${dy-(to.y + offleft.y + offfront.y * 1.2)}
-              ${dx + to.x + offright.x + offfront.x * 1.2}
-              ${dy-(to.y + offright.y + offfront.y * 1.2)}
-              ${dx + to.x + offright.x}
-              ${dy-(to.y + offright.y)}
-            L ${dx + from.x + offright.x} ${dy-(from.y + offright.y)}
-            C ${dx + from.x + offright.x - offfront.x * 1.2}
-              ${dy-(from.y + offright.y - offfront.y * 1.2)}
-              ${dx + from.x + offleft.x - offfront.x * 1.2}
-              ${dy-(from.y + offleft.y - offfront.y * 1.2)}
-              ${dx + from.x + offleft.x}
-              ${dy-(from.y + offleft.y)}`
-        }
-        path.setAttribute("d", d);
+        const d = new SVGPath(dx, dy);
+        drawStroke(d, stroke, thickness, unit);
+        path.setAttribute("d", d.toString());
         path.setAttribute("fill", "black");
         path.setAttribute("data-stroke-index", i)
         svg.appendChild(path);
@@ -417,7 +568,7 @@ selectfilter.addEventListener("input", loadglyphs);
 document.getElementById("filter-type-all").addEventListener("input", loadglyphs);
 document.getElementById("filter-type-defined").addEventListener("input", loadglyphs);
 document.getElementById("filter-type-undefined").addEventListener("input", loadglyphs);
-window.addEventListener("resize, orientationchange", loadglyphs)
+window.addEventListener("resize, orientationchange", loadglyphs);
 filtersearch.addEventListener("input", loadglyphs);
 
 // ligatures
@@ -521,6 +672,14 @@ const editglyphs = document.getElementById("edit-glyphs");
 const editnew = document.getElementById("edit-new-stroke");
 const editdelete = document.getElementById("edit-delete-stroke");
 const editdeleteglyph = document.getElementById("edit-delete-glyph");
+const editstroke = document.getElementById("edit-stroke-select");
+const editwidth = document.getElementById("edit-width");
+const editdefault = document.getElementById("edit-stroke-default");
+
+const editcapradios = document.querySelectorAll('input[name="edit-cap-type"]');
+const editcornerradios = document.querySelectorAll('input[name="edit-corner-type"]');
+function editcap() { return document.querySelector('input[name="edit-cap-type"]:checked'); }
+function editcorner() { return document.querySelector('input[name="edit-corner-type"]:checked'); }
 
 let editor = {
     unit: 1,
@@ -544,8 +703,25 @@ let editor = {
 
 function render() {
     editsvg.innerHTML = "";
+    editor.selected = -1;
+    editor.point = -1;
+    editor.mode = "select";
+    editstroke.value = "none";
+    editwidth.value = "none";
+    editwidth.parentNode.classList.add("disabled");
+    editcapradios.forEach((node) => node.parentNode.classList.add("disabled"));
+    editcornerradios.forEach((node) => node.parentNode.classList.add("disabled"));
     if (!selectedGlyph) {
         edittitle.innerHTML = "Select a glyph or ligature to start!";
+        editunit.parentNode.classList.add("disabled");
+        editx.parentNode.classList.add("disabled");
+        edity.parentNode.classList.add("disabled");
+        editadvance.parentNode.classList.add("disabled");
+        editstroke.parentNode.classList.add("disabled");
+        editglyphs.parentNode.classList.add("disabled");
+        editnew.classList.add("disabled");
+        editdelete.classList.add("disabled");
+        editdeleteglyph.classList.add("disabled");
         return;
     };
     if (!fontData[selectedType][selectedGlyph]) {
@@ -576,6 +752,16 @@ function render() {
         editglyphs.value = fontData.ligatures[selectedGlyph].glyphs;
     };
     
+    editunit.parentNode.classList.remove("disabled");
+    editx.parentNode.classList.remove("disabled");
+    edity.parentNode.classList.remove("disabled");
+    editadvance.parentNode.classList.remove("disabled");
+    editstroke.parentNode.classList.remove("disabled");
+    editglyphs.parentNode.classList.remove("disabled");
+    editnew.classList.remove("disabled");
+    editdelete.classList.remove("disabled");
+    editdeleteglyph.classList.remove("disabled");
+    
     editor.scale = Math.min(editsvg.clientWidth / (fontData.width - 1), editsvg.clientHeight / (fontData.height - 1)) * 0.65
     editor.units.x = Math.ceil(editsvg.clientWidth / editor.scale);
     editor.units.y = Math.ceil(editsvg.clientHeight / editor.scale);
@@ -593,13 +779,13 @@ function drawPath() {
         path.remove();
     });
     const glyph = fontData[selectedType][selectedGlyph];
-    if (editor.mode != "add") {
-        glyph.data.forEach((stroke, i) => { // cleansing
-            if (stroke.length < 4) glyph.data.splice(i, 1);
-        })
-    }
     const pos = editor.pos((fontData.width - 1) / 2, (fontData.height - 1) / 2);
     drawSVGGlyph(editsvg, glyph, editor.scale, pos.x, pos.y);
+    editstroke.value = "none";
+    editdefault.classList.add("disabled");
+    editwidth.parentNode.classList.add("disabled");
+    editcapradios.forEach((node) => node.parentNode.classList.add("disabled"));
+    editcornerradios.forEach((node) => node.parentNode.classList.add("disabled"));
 
     editsvg.querySelectorAll("path").forEach((path) => {
         path.classList.add("glyph-path")
@@ -615,6 +801,12 @@ function drawPath() {
                 if (path.classList.contains("select")) {
                     path.classList.remove("select");
                     editor.selected = -1;
+                    editor.point = -1;
+                    editstroke.value = "none";
+                    editdefault.classList.add("disabled");
+                    editwidth.parentNode.classList.add("disabled");
+                    editcapradios.forEach((node) => node.parentNode.classList.add("disabled"));
+                    editcornerradios.forEach((node) => node.parentNode.classList.add("disabled"));
                 } else {
                     ThePathFunctionTM(editsvg, path, glyph);
                 }
@@ -627,21 +819,31 @@ function ThePathFunctionTM(editsvg, path, glyph) {
     editsvg.querySelectorAll("path.select").forEach((path) => {
         path.classList.remove("select");
     })
-    const index = path.getAttribute("data-stroke-index");
+    const index = parseInt(path.getAttribute("data-stroke-index"));
+    const stroke = glyph.data[index];
     path.classList.add("select");
     editor.selected = index;
+    editstroke.value = index + 1;
+    editwidth.parentNode.classList.remove("disabled");
+    editwidth.value = stroke.width * 100;
+    if (fontData.defaultwidth != stroke.width || fontData.defaultjoin != stroke.join || fontData.defaultcap != stroke.cap) {
+        editdefault.classList.remove("disabled");
+    }
+    editcapradios.forEach((node) => node.parentNode.classList.remove("disabled"));
+    editcap().checked = false;
+    document.getElementById("edit-cap-type-" + stroke.cap).checked = true;
+    editcornerradios.forEach((node) => node.parentNode.classList.remove("disabled"));
+    editcorner().checked = false;
+    document.getElementById("edit-corner-type-" + stroke.join).checked = true;
 
-    const stroke = glyph.data[index];
-    for (let i = 0; i < stroke.length; i = i + 2) {
-        const to = {x: stroke[i],
-                    y: stroke[i+1]};
+    for (let i = 0; i < stroke.points.length; i += 2) {
+        const to = {x: stroke.points[i], y: stroke.points[i+1]};
         const pointto = editorcircle(to.x, to.y, 0.15);
         pointto.classList.add("path-point");
         if (editor.point == i) pointto.classList.add("select");
         editsvg.appendChild(pointto);
         if (i > 0) {
-            const from = {x: stroke[i-2],
-                          y: stroke[i-1]};
+            const from = {x: stroke.points[i-2], y: stroke.points[i-1]};
             const line = editorline(from.x, from.y, to.x, to.y)
             line.classList.add("path-line");
             editsvg.appendChild(line);
@@ -665,8 +867,8 @@ editsvg.addEventListener("mousemove", (event) => {
     if ((editor.mode == "move" || editor.mode == "add") && editor.selected != -1 && editor.point != -1) {
         const glyph = fontData[selectedType][selectedGlyph];
         const stroke = glyph.data[editor.selected];
-        stroke[editor.point] = mouse.x;
-        stroke[editor.point + 1] = mouse.y;
+        stroke.points[editor.point] = mouse.x;
+        stroke.points[editor.point + 1] = mouse.y;
         unsaved = true;
         drawPath();
     }
@@ -680,6 +882,8 @@ editsvg.addEventListener("mouseup", () => {
         editsvg.classList.remove("nohover");
     } else if (editor.mode == "add") {
         editor.point += 2;
+        const points = fontData[selectedType][selectedGlyph].data[editor.selected].points;
+        if (points[0] == points[points.length - 2] && points[1] == points[points.length - 1] && points.length > 2) newstroke();
         drawPath();
     }
 });
@@ -783,13 +987,55 @@ editadvance.addEventListener("input", () => {
         drawGrid();
     }
 })
+editwidth.addEventListener("input", () => {
+    if (!isNaN(parseFloat(editadvance.value))) {
+        fontData[selectedType][selectedGlyph].data[editor.selected].width = parseFloat(editwidth.value) / 100;
+        unsaved = true;
+        drawPath();
+    }
+})
+editdefault.addEventListener("click", () => {
+    const stroke = fontData[selectedType][selectedGlyph].data[editor.selected];
+    fontData.defaultwidth = stroke.width;
+    fontData.defaultjoin = stroke.join;
+    fontData.defaultcap = stroke.cap;
+    unsaved = true;
+    editdefault.classList.add("disabled");
+})
+editstroke.addEventListener("input", () => {
+    if (!isNaN(parseFloat(editadvance.value)) && fontData[selectedType][selectedGlyph].data[parseFloat(editstroke.value) - 1]) {
+        editor.selected = parseFloat(editstroke.value) - 1;
+        drawPath();
+    } else {
+        editor.selected = -1;
+        drawPath();
+    }
+})
+editcapradios.forEach((radio) => {
+    radio.addEventListener("input", () => {
+        if (radio.checked) {
+            fontData[selectedType][selectedGlyph].data[editor.selected].cap = radio.value;
+            unsaved = true;
+            drawPath();
+        }
+    })
+})
+editcornerradios.forEach((radio) => {
+    radio.addEventListener("input", () => {
+        if (radio.checked) {
+            fontData[selectedType][selectedGlyph].data[editor.selected].join = radio.value;
+            unsaved = true;
+            drawPath();
+        }
+    })
+})
 function newstroke() {
     const glyph = fontData[selectedType][selectedGlyph];
     if (editor.mode != "add") {
         editor.mode = "add";
         editor.selected = glyph.data.length;
         editor.point = 0;
-        glyph.data.push([0, 0]);
+        glyph.data.push({points: [0, 0], width: fontData.defaultwidth, join: fontData.defaultjoin, cap: fontData.defaultcap});
         editor.mouselast.x = NaN;
         editor.mouselast.y = NaN;
         editsvg.classList.add("nohover");
@@ -797,7 +1043,7 @@ function newstroke() {
         unsaved = true;
         drawPath();
     } else {
-        glyph.data[editor.selected].splice(editor.point, 2);
+        glyph.data[editor.selected].points.splice(editor.point, 2);
         editor.mode = "select";
         editor.selected = -1;
         editor.point = -1;
@@ -820,7 +1066,7 @@ function deletestroke() {
 }
 editdelete.addEventListener("click", deletestroke);
 window.addEventListener("keydown", (event) => {
-    if (!edittab.classList.contains("active")) return;
+    if (!edittab.classList.contains("active") || document.activeElement.nodeName == "INPUT") return;
     if ((event.key == "n" && editor.mode != "add")
        || ((event.key == "Enter" || event.key == "Escape") && editor.mode == "add")
        || event.key == " ") {
@@ -940,14 +1186,13 @@ importproject.addEventListener("click", () => {
             const f = JSON.parse(reader.result);
             console.log(f);
             let version = f.dataformat || 1
-            // this is so ugly but WHATEVER enjoy debugging this HAAHHAHAA.
             if (typeof f.name == "string" && (typeof f.style == "string" || version < 2) && typeof f.width == "number" && typeof f.height == "number" && typeof f.thickness == "number" && typeof f.unit == "number" && typeof f.unitsPerEm == "number" && typeof f.ascender == "number" && typeof f.descender == "number" && typeof f.glyphs == "object" && (typeof f.ligatures == "object" || version < 2) && (typeof f.dataformat == "number" || version < 2)) {
                 const checkthing = (g) => {
                     Object.keys(g).forEach((glyph) => {
                         if (typeof g[glyph].advance == "number" && Array.isArray(g[glyph].data) && (g == f.glyphs || typeof g[glyph].glyphs == "string")) {
                             g[glyph].data.forEach((stroke) => {
-                                if (Array.isArray(stroke)) {
-                                    stroke.forEach((point) => {
+                                if ((version < 3 && Array.isArray(stroke)) || (Array.isArray(stroke.points) && typeof stroke.width == "number" && typeof stroke.join == "string" && typeof stroke.cap == "string" && stroke.join.match(/^round$|^miter$|^bevel$|^none$/) && stroke.cap.match(/^circle$|^square$|^triangle$|^none$/))) {
+                                    (version < 3 ? stroke : stroke.points).forEach((point) => {
                                         if (typeof point != "number") {
                                             alert("Invalid project file!");
                                             return;
@@ -977,6 +1222,21 @@ importproject.addEventListener("click", () => {
                 f.ligatures = {};
                 f.dataformat = 2;
                 version++;
+            }
+            if (version == 2) {
+                f.defaultwidth = 1;
+                f.defaultcap = "circle";
+                f.defaultjoin = "round";
+
+                const upgradething = (g) => {
+                    Object.keys(g).forEach((glyph) => {
+                        g[glyph].data.forEach((stroke, i) => {
+                            g[glyph].data[i] = {points: stroke, width: 1, join: "round", cap: "circle"};
+                        })
+                    })
+                }
+                upgradething(f.glyphs);
+                upgradething(f.ligatures);
             }
             
             // loading
