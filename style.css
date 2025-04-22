@@ -1,4 +1,4 @@
-html {
+ html {
   height: 100vh;
   width: 100vw;
 }
@@ -7,7 +7,7 @@ html {
   /* huh */
 }
 
-input[type="button"] {
+input[type="button"], .radio-icon svg {
   padding: 0.2em 0.5em;
   border: 1px solid #000;
   border-radius: 5px;
@@ -37,11 +37,32 @@ input[type="number"], input[type="text"] {
 input[type="text"] {
   width: 10em;
 }
+.radio-icon {
+  vertical-align: middle;
+}
+.radio-icon svg {
+  width: 1em;
+  height: 1em;
+}
+.radio-icon input {
+  display: none;
+}
+.radio-icon input:checked ~ svg {
+  background-color: #eee;
+}
+label.disabled *, input.disabled {
+  background-color: #bbb !important;
+  pointer-events: none !important;
+}
+label.disabled {
+  pointer-events: none;
+}
 
 .tabs {
   display: flex;
   justify-content: left;
   border-bottom: 1px solid #000;
+  overflow-x: scroll;
 }
 input.tab {
   border-radius: 5px 5px 0 0;
@@ -211,4 +232,9 @@ svg {
 }
 .path-line {
   stroke: #fff;
+}
+#debug {
+  background-color: #f00;
+  border: 2px solid #500;
+  padding: 0.5em;
 }
