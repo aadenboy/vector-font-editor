@@ -49,6 +49,7 @@ dataformat 3: added line styling
 
 */
 
+/*
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
     alert(lineNumber + " - Error occured: " + errorMsg);//or any message
     return false;
@@ -62,6 +63,7 @@ function debug(s) {
     p.innerHTML = s;
     debugdiv.appendChild(p);
 }
+*/
 
 let fontData = {
     name: "Unnamed font",
