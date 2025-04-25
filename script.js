@@ -143,6 +143,7 @@ function drawArc(path, x1, y1, x4, y4, xc, yc) {
 
 const r90 = Math.PI/2;
 function drawStroke(path, stroke, thickness, unit) {
+    const datastart = path.commands.length;
     const tw = thickness * stroke.width;
     const points = stroke.points;
     const last = points.length - 2;
@@ -250,13 +251,16 @@ function drawStroke(path, stroke, thickness, unit) {
                 if (cross < 0 || stroke.join == "miter") path.lineTo(b.x+lba.x+uba.x*tan, b.y+lba.y+uba.y*tan);
                 if (i == last && cross < 0) { // turns out it's symmetric, that's why!
                     path.moveTo(b.x-lba.x, b.y-lba.y);
-                    path.moveTo(b.x+lba.x+uba.x*tan, b.y+lba.y+uba.y*tan, 0);
+                    // hacky way of doing this but whatever
+                    path.moveTo(b.x+lba.x+uba.x*tan, b.y+lba.y+uba.y*tan);
+                    path.commands[datastart] = path.commands[path.commands.length-1];
+                    path.commands.pop();
                 } else if (i == last && cross > 0) {
                     path.moveTo(b.x-lba.x-uba.x*tan, b.y-lba.y-uba.y*tan);
-                    path.moveTo(b.x+lcb.x, b.y+lcb.y, 0);
+                    path.moveTo(b.x+lcb.x, b.y+lcb.y);
+                    path.commands[datastart] = path.commands[path.commands.length-1];
+                    path.commands.pop();
                 }
-            } else {
-                
             }
         }
     }
