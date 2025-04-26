@@ -50,8 +50,8 @@ dataformat 3: added line styling
 */
 
 /*
-window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
-    alert(lineNumber + " - Error occured: " + errorMsg);//or any message
+window.onerror = (message, _, line) => {
+    alert(line + " - Error occured: " + message);
     return false;
 }
 
@@ -86,7 +86,7 @@ let fontData = {
         ]},
     },
     ligatures: {},
-    dataformat: 2
+    dataformat: 3
 };
 let selectedGlyph;
 let selectedType = "glyphs";
@@ -288,6 +288,7 @@ function drawSVGGlyph(svg, gdata, scale, x, y) {
     let unit = scale;
     const dx = x - (fontData.width - 1) * unit / 2
     const dy = y + (fontData.height - 1) * unit / 2
+    debugdiv.innerHTML = ""
     gdata.data.forEach((stroke, i) => {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const d = new SVGPath(dx, dy);
@@ -486,15 +487,15 @@ function loadglyphs() {
         glyphs = [];
         if (search.startsWith("U+")) {
             const codepoint = parseInt(search.slice(2), 16);
-            if (codepoint) glyphs.push(codepoint);
+            if (codepoint && codepoint >= 0 && codepoint <= 0x10FFFF) glyphs.push(codepoint);
         } else if (search.length == 1) {
             glyphs.push(search.codePointAt(0));
         } else {
-            for (let i = block.startCode; i <= block.endCode; i++) {
-                if (characters[i] && characters[i].name.toLowerCase().includes(search.toLowerCase())) {
-                    glyphs.push(i);
+            characters.forEach((c) => {
+                if (c.name.toLowerCase().includes(search.toLowerCase())) {
+                    glyphs.push(c.code);
                 }
-            }
+            });
         }
     }
 
@@ -509,8 +510,9 @@ function loadglyphs() {
         const glyphlabel = document.createElement("span");
         glyphlabel.classList.add("glyph-name");
 
-        if (characters[index]) {
-            glyphlabel.innerHTML = characters[index].name.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const cdata = characters.find((c) => c.code == index);
+        if (cdata) {
+            glyphlabel.innerHTML = cdata.name.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         } else if (index == ".notdef") {
             glyphlabel.innerHTML = ".notdef";
         } else {
@@ -1191,7 +1193,8 @@ importproject.addEventListener("click", () => {
             // validation crap
             const f = JSON.parse(reader.result);
             console.log(f);
-            let version = f.dataformat || 1
+            if (f.dataformat == 2 && f.defaultjoin) f.dataformat = 3; // because I messed up
+            let version = f.dataformat || 1;
             if (typeof f.name == "string" && (typeof f.style == "string" || version < 2) && typeof f.width == "number" && typeof f.height == "number" && typeof f.thickness == "number" && typeof f.unit == "number" && typeof f.unitsPerEm == "number" && typeof f.ascender == "number" && typeof f.descender == "number" && typeof f.glyphs == "object" && (typeof f.ligatures == "object" || version < 2) && (typeof f.dataformat == "number" || version < 2)) {
                 const checkthing = (g) => {
                     Object.keys(g).forEach((glyph) => {
@@ -1233,6 +1236,7 @@ importproject.addEventListener("click", () => {
                 f.defaultwidth = 1;
                 f.defaultcap = "circle";
                 f.defaultjoin = "round";
+                f.dataformat = 3;
 
                 const upgradething = (g) => {
                     Object.keys(g).forEach((glyph) => {
