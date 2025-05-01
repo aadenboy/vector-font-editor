@@ -55,7 +55,7 @@ window.onerror = (message, _, line) => {
     return false;
 }
 
-const debugdiv = document.createElement("div");
+*/const debugdiv = document.createElement("div"); debugdiv.style.display = "none";/*
 debugdiv.id = "debug";
 document.body.appendChild(debugdiv);
 function debug(s) {
